@@ -137,3 +137,6 @@ dmypy.json
 
 vectorstore.pkl
 langchain.readthedocs.io/
+
+# Big data files
+data/
