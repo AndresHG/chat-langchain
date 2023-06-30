@@ -1,30 +1,36 @@
 """Load html from files, clean up, split, ingest into Weaviate."""
-import pickle
 import nltk
+import glob
 
 from langchain.document_loaders import ReadTheDocsLoader, UnstructuredPDFLoader
-from langchain.embeddings import OpenAIEmbeddings
+from langchain.embeddings import OpenAIEmbeddings, HuggingFaceInstructEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores.faiss import FAISS
+from langchain.vectorstores.chroma import Chroma
 
-nltk.download('punkt')
+nltk.download("punkt")
 
 
 def ingest_docs():
-    """Get documents from web pages."""
-    loader = UnstructuredPDFLoader("data/PFRPG_SRD.pdf")
-    raw_documents = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-    )
-    documents = text_splitter.split_documents(raw_documents)
-    embeddings = OpenAIEmbeddings()
-    vectorstore = FAISS.from_documents(documents, embeddings)
+    """Get documents from local and load data."""
+    documents = []
+    for filename in glob.glob("data/PFRPG_SRD_*.pdf"):
+        loader = UnstructuredPDFLoader(filename)
+        raw_documents = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=50,
+        )
+        documents.extend(text_splitter.split_documents(raw_documents))
+        print(f"File read - {filename}")
 
-    # Save vectorstore
-    with open("vectorstore.pkl", "wb") as f:
-        pickle.dump(vectorstore, f)
+    embeddings = HuggingFaceInstructEmbeddings(
+        model_name="hkunlp/instructor-large", model_kwargs={"device": "cuda"}
+    )
+    persist_directory = "db"
+    vectorstore = Chroma.from_documents(documents, embeddings, persist_directory=persist_directory)
+
+    vectorstore.persist()
+    print("Vector-store saved and ready to use!")
 
 
 if __name__ == "__main__":
